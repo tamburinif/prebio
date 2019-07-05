@@ -156,6 +156,10 @@ filter(prebio_meta, sequenced_status == F & is.na(date))
 readcounts_f <- "01_processing/readcounts.tsv"
 readcounts <- read.table(readcounts_f, sep = '\t', header = T)
 counts <- readcounts[, c(1:3, 5, 7)]
+
+# remove P83
+counts <- filter(counts, Sample != "P83")
+
 colnames(counts) <- c("Sample", "Raw reads", "Trimmed reads", "Deduplicated reads", "Non-human reads")
 counts_long <- melt(counts, id.vars = "Sample", variable.name = "step", value.name = "reads")
 counts_long$reads_m <- (counts_long$reads / 1e6)
@@ -174,7 +178,27 @@ readcount_plot <- ggplot(counts_long, aes(x=reads_m, fill=step)) +
     )
 # ggsave("plots/readcounts_preproccessing.png", readcount_plot, device = "png", height = 12, width = 12)
 
+# sequencing stats
+median(counts$`Raw reads`) # median raw
+range(counts$`Raw reads`) # range raw
+median(counts$`Non-human reads`) # median preprocessed
+range(counts$`Non-human reads`) # range preprocessed
 
+# TO DO move this up earlier
+# create a sensical naming convention for samples and save the data frame with re-named samples
+fos <- filter(prebio_meta, group == "FOS")
+control <- filter(prebio_meta, group == "Control")
+patient_labels <- data.frame(patient_id = sort(unique(fos$patient_id)), label = paste0("F", seq(unique(fos$patient_id))))
+patient_labels <- rbind(labels, data.frame(patient_id = mixedsort(as.character(unique(control$patient_id))), label = paste0("C", seq(unique(control$patient_id)))))
+
+rename <- prebio_meta[, c("day", "patient_id", "sequencing_id", "group")]
+rename$patient_label <- patient_labels[match(rename$patient_id, patient_labels$patient_id), "label"]
+rename$stool_label <- paste(rename$patient_label, "day", rename$day, sep = '_')
+
+counts$`Stool sample` <- rename[match(counts$Sample, rename$sequencing_id), "stool_label"]
+counts <- counts[mixedorder(counts$`Stool sample`), ]
+
+write.table(counts[, c(6, 2:5)], "/Users/Fiona/Desktop/table_s1_readcounts.tsv", sep = '\t', row.names = F, quote = F)
 ######################################################################
 ### 3. Sample collection plot ########################################
 ######################################################################
