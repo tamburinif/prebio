@@ -1,5 +1,5 @@
 # Data analysis for BMT303 trial
-# Fiona Tamburini, Feb 2019
+# Fiona Tamburini
 
 # required packages
 library(ggplot2)
