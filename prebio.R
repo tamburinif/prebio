@@ -16,31 +16,26 @@ library(MASS)
 library(genefilter)
 library(ggpubr)
 library(ggbeeswarm)
+library(cowplot)
 
 ######################################################################
 ### Setup ############################################################
 ######################################################################
 
-# set working directory for prebio files
+# set this to /your/path/to/prebio2
 setwd("/Users/Fiona/scg4_fiona/prebio2/")
 
-# ggplot theme
-my_thm = list(theme(title = element_text(size = 24),
-                    axis.title = element_text(size = 22),
-                    axis.text = element_text(size = 18),
-                    legend.title = element_blank(),
-                    legend.text = element_text(size = 22),
-                    strip.text = element_text(size = 20)
-))
-
 # color palette
-# Prebiotic, Control
+# FOS, Control
 my_pal <- c("#D55E00", "#0072B2")
-
+names(my_pal) <- c("FOS", "Control")
 
 ######################################################################
 ### Read in data and metadate files for prebiotic project analysis ###
 ######################################################################
+
+# TO DO: change filepaths/organize for portability
+# TO DO: remove P83 and re-save
 
 ### Read sample metadata -- which stools were collected/sequenced
 prebio_meta_f <- "00_metadata/prebio_meta.tsv"
@@ -156,10 +151,6 @@ filter(prebio_meta, sequenced_status == F & is.na(date))
 readcounts_f <- "01_processing/readcounts.tsv"
 readcounts <- read.table(readcounts_f, sep = '\t', header = T)
 counts <- readcounts[, c(1:3, 5, 7)]
-
-# remove P83
-counts <- filter(counts, Sample != "P83")
-
 colnames(counts) <- c("Sample", "Raw reads", "Trimmed reads", "Deduplicated reads", "Non-human reads")
 counts_long <- melt(counts, id.vars = "Sample", variable.name = "step", value.name = "reads")
 counts_long$reads_m <- (counts_long$reads / 1e6)
@@ -168,37 +159,18 @@ counts_long$reads_m <- (counts_long$reads / 1e6)
 readcount_plot <- ggplot(counts_long, aes(x=reads_m, fill=step)) +
   geom_histogram(binwidth = 1) +
   scale_x_continuous(labels = comma, breaks = seq(0, 100, 10)) +
-  facet_grid(step~., scales = "free_y") +
-  theme_bw() +
-  my_thm +
+  facet_grid(step ~ ., scales = "free_y") +
+  theme_cowplot(12) +
   labs(
-    title = "Preprocessing Readcounts\n",
     x = "\nReads (M)",
-    y = "Count\n"
-    )
-# ggsave("plots/readcounts_preproccessing.png", readcount_plot, device = "png", height = 12, width = 12)
+    y = "Count\n",
+    fill = ""
+  ) +
+  background_grid()
 
-# sequencing stats
-median(counts$`Raw reads`) # median raw
-range(counts$`Raw reads`) # range raw
-median(counts$`Non-human reads`) # median preprocessed
-range(counts$`Non-human reads`) # range preprocessed
+ggsave("plots/readcounts_preproccessing.png", readcount_plot, device = "png", height = 6, width = 7)
 
-# TO DO move this up earlier
-# create a sensical naming convention for samples and save the data frame with re-named samples
-fos <- filter(prebio_meta, group == "FOS")
-control <- filter(prebio_meta, group == "Control")
-patient_labels <- data.frame(patient_id = sort(unique(fos$patient_id)), label = paste0("F", seq(unique(fos$patient_id))))
-patient_labels <- rbind(labels, data.frame(patient_id = mixedsort(as.character(unique(control$patient_id))), label = paste0("C", seq(unique(control$patient_id)))))
 
-rename <- prebio_meta[, c("day", "patient_id", "sequencing_id", "group")]
-rename$patient_label <- patient_labels[match(rename$patient_id, patient_labels$patient_id), "label"]
-rename$stool_label <- paste(rename$patient_label, "day", rename$day, sep = '_')
-
-counts$`Stool sample` <- rename[match(counts$Sample, rename$sequencing_id), "stool_label"]
-counts <- counts[mixedorder(counts$`Stool sample`), ]
-
-write.table(counts[, c(6, 2:5)], "/Users/Fiona/Desktop/table_s1_readcounts.tsv", sep = '\t', row.names = F, quote = F)
 ######################################################################
 ### 3. Sample collection plot ########################################
 ######################################################################
@@ -230,49 +202,26 @@ samples <- filter(samples, sample_day <= 100)
 
 # plot collected samples
 sample_plot <- ggplot(samples, aes(x=sample_day, y=label, shape=sequenced_status)) +
-  geom_point(size = 3, color = "black") +
+  geom_point(size = 2, color = "black") +
   scale_shape_manual(values = c(16, 1, 4)) +
-  # scale_color_manual(values = c("chocolate4")) +
   facet_wrap(~ group, ncol = 1, strip.position = "top", scales = "free_y") +
-  theme_bw() +
-  theme(
-    title = element_text(size = 24),
-    axis.title = element_text(size = 22),
-    axis.text = element_text(size = 20),
-    legend.title = element_blank(),
-    legend.text = element_text(size = 22),
-    strip.text = element_text(size = 18),
-    strip.placement = "outside"
-  ) +
+  theme_cowplot() +
   labs(
-    title = "Patient Stool Sampling \n",
     x = "\nDay relative to transplant",
-    y = "Patient\n"
+    y = "Patient\n",
+    shape = "Status"
   ) +
   scale_x_continuous(labels = comma, breaks = c(-5, 0, 7, 14, 28, 60, 100))
 
-ggsave("plots/stool_sampling.png", sample_plot, device = "png", height = 10, width = 12)
+ggsave("plots/stool_sampling.png", sample_plot, device = "png", height = 6, width = 6)
 
 # color by timepoint
-
 sample_plot2 <- ggplot(samples, aes(x=sample_day, y=label, shape=sequenced_status)) +
-  geom_point(size = 3, aes(color = factor(day, levels = c(-5, 0, 7, 14, 28, 60, 100)))) +
+  geom_point(size = 2, aes(color = factor(day, levels = c(-5, 0, 7, 14, 28, 60, 100)))) +
   scale_shape_manual(values = c(16, 1, 4)) +
-  # scale_color_manual(values = c("chocolate4")) +
   facet_wrap(~ group, ncol = 1, strip.position = "top", scales = "free_y") +
-  theme_bw() +
-  # scale_color_brewer(palette = "Spectral") +
-  theme(
-    title = element_text(size = 24),
-    axis.title = element_text(size = 22),
-    axis.text = element_text(size = 20),
-    # legend.title = element_blank(),
-    legend.text = element_text(size = 22),
-    strip.text = element_text(size = 18),
-    strip.placement = "outside"
-  ) +
+  theme_cowplot(12) +
   labs(
-    title = "Patient Stool Sampling \n",
     x = "\nDay relative to transplant",
     y = "Patient\n",
     shape = "Status",
@@ -280,7 +229,7 @@ sample_plot2 <- ggplot(samples, aes(x=sample_day, y=label, shape=sequenced_statu
   ) +
   scale_x_continuous(labels = comma, breaks = c(-5, 0, 7, 14, 28, 60, 100))
 
-ggsave("plots/stool_sampling_colored.png", sample_plot2, device = "png", height = 10, width = 12)
+ggsave("plots/stool_sampling_colored.png", sample_plot2, device = "png", height = 6, width = 6)
 
 
 ######################################################################
@@ -368,10 +317,10 @@ scfa_plot3 <- ggplot(scfa_long2, aes(x = group, y = value)) +
   # stat_summary(fun.data=mean_sdl, mult=1, aes(group=group), position=position_dodge(.9), geom="pointrange", color="black") +
   # scale_y_log10() +
   # pseudo_log_trans() +
-  labs(title='Short-chain fatty acid measurements',
-       x = "\nShort-chain fatty acid",
-       y = "Concentration (umol/g stool)\n",
-       fill="") +
+  labs(
+    x = "\nShort-chain fatty acid",
+    y = "Concentration (umol/g stool)\n",
+    fill="") +
   theme_bw() +
   scale_fill_manual(values = my_pal) +
   my_thm +
@@ -565,16 +514,16 @@ for (patient in patient_list) {
          x = "Day",
          y = "Species Relative Abundance",
          fill="Species") +
-      scale_fill_manual(values=my_pal, guide = guide_legend(ncol = 1)) +
-      theme_classic() +
-      theme(
-        axis.text.x = element_text(size = 18, hjust = 1),
-        axis.text.y = element_text(size = 18),
-        plot.title = element_text(size = 22)
-      ) +
+    scale_fill_manual(values=my_pal, guide = guide_legend(ncol = 1)) +
+    theme_classic() +
+    theme(
+      axis.text.x = element_text(size = 18, hjust = 1),
+      axis.text.y = element_text(size = 18),
+      plot.title = element_text(size = 22)
+    ) +
     scale_x_continuous(breaks = c(-5, 0, 7, 14, 28, 60, 100)) +
     scale_y_continuous(breaks = seq(0, 100, 10), limits = c(0, 100))
-
+  
   ggsave(paste0("plots/area plots/", patient, ".png"), area_plot, device = "png", height = 8, width = 12)
 }
 
