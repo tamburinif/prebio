@@ -27,6 +27,8 @@ setwd("/Users/Fiona/scg4_fiona/prebio2/prebio")
 my_pal <- c("#D55E00", "#0072B2")
 names(my_pal) <- c("FOS", "Control")
 
+dir.create("plots", showWarnings = F)
+
 ######################################################################
 ### Read in data and metadate files for prebiotic project analysis ###
 ######################################################################
