@@ -38,52 +38,43 @@ names(my_pal) <- c("FOS", "Control")
 # TO DO: remove P83 and re-save
 
 ### Read sample metadata -- which stools were collected/sequenced
-prebio_meta_f <- "00_metadata/prebio_meta.tsv"
-prebio_meta <- read.table(prebio_meta_f, sep = '\t', header = T, quote="\"")
+prebio_meta_all <- read.table("00_metadata/prebio_meta.tsv", sep = '\t', header = T, quote="\"")
 
 # set FOS/Control grouping
-prebio_meta$group <- ifelse(startsWith(as.character(prebio_meta$patient_id), '303'), "FOS", "Control")
-prebio_meta$group <- factor(prebio_meta$group, levels = c("FOS", "Control"))
+prebio_meta_all$group <- ifelse(startsWith(as.character(prebio_meta_all$patient_id), '303'), "FOS", "Control")
+prebio_meta_all$group <- factor(prebio_meta_all$group, levels = c("FOS", "Control"))
 
 # format columns as date
-prebio_meta$date <- as.Date(prebio_meta$date)
-prebio_meta$trx <- as.Date(prebio_meta$trx)
+prebio_meta_all$date <- as.Date(prebio_meta_all$date)
+prebio_meta_all$trx <- as.Date(prebio_meta_all$trx)
 
 # set factor levels for downstream plots
-prebio_meta$patient_id <- factor(prebio_meta$patient_id, levels = mixedsort(unique(prebio_meta$patient_id)))
+prebio_meta_all$patient_id <- factor(prebio_meta_all$patient_id, levels = mixedsort(unique(prebio_meta_all$patient_id)))
 
-# only complete metadata
-# prebio_meta_c <- prebio_meta[complete.cases(prebio_meta), ]
+# metadata for sequenced samples only
+prebio_meta <- filter(prebio_meta_all, sequenced_status == T)
+prebio_meta <- prebio_meta[mixedorder(unique(prebio_meta$sequencing_id)), ]
 
 ### Read taxonomic classification data
 ## bracken species read counts including unclassifed
-brack_sp_f <- "02_kraken2_feb2019/processed_results/taxonomy_matrices/bracken_species_reads.txt"
-brack_sp <- read.table(brack_sp_f, sep = '\t', header = T, quote = "")
-
-brack_g_f <- "02_kraken2_feb2019/processed_results/taxonomy_matrices/bracken_genus_reads.txt"
-brack_g <- read.table(brack_g_f, sep = '\t', header = T, quote = "")
+brack_sp <- read.table("02_kraken2_feb2019/processed_results/taxonomy_matrices/bracken_species_reads.txt", sep = '\t', header = T, quote = "")
+brack_g <- read.table("02_kraken2_feb2019/processed_results/taxonomy_matrices/bracken_genus_reads.txt", sep = '\t', header = T, quote = "")
 
 # relative abundance normalized -- classified/no human only
 brack_sp_filt <- brack_sp[!rownames(brack_sp) %in% c("Unclassified", "Homo sapiens"),]
 brack_g_filt <- brack_g[!rownames(brack_g) %in% c("Unclassified", "Homo"),]
-
-brack_sp_norm <- sweep(brack_sp_filt, 2, colSums(brack_sp_filt), "/")
-brack_g_norm <- sweep(brack_g_filt, 2, colSums(brack_g_filt), "/")
-
-## bracken percent only classifed
-# brack_sp_perc_f <- "02_kraken2/kraken2_classification/processed_results/taxonomy_matrices_classified_only/bracken_species_percentage.txt"
-# brack_sp_perc_f <- "02_kraken2_feb2019/processed_results/taxonomy_matrices_classified_only/bracken_species_percentage.txt"
-# brack_sp_perc <- read.table(brack_sp_perc_f, sep = '\t', header = T, quote = "")
-# 
-# brack_g_perc_f <- "02_kraken2_feb2019/processed_results/taxonomy_matrices_classified_only/bracken_genus_percentage.txt"
-# brack_g_perc <- read.table(brack_g_perc_f, sep = '\t', header = T, quote = "")
+brack_sp_perc <- sweep(brack_sp_filt, 2, colSums(brack_sp_filt), "/")
+brack_g_perc <- sweep(brack_g_filt, 2, colSums(brack_g_filt), "/")
 
 # remove P83 sample from all taxonomy tables
-brack_sp[, "P83"] <- NULL
-brack_g[, "P83"] <- NULL
+brack_sp_perc[, "P83"] <- NULL
+brack_g_perc[, "P83"] <- NULL
+
+# set order
+brack_sp_perc <- brack_sp_perc[, mixedorder(unique(prebio_meta$sequencing_id))]
+brack_g_perc <- brack_g_perc[, mixedorder(unique(prebio_meta$sequencing_id))]
 
 ## Read short chain fatty acid measurements
-
 # initial
 scfa1_f <- "/Users/Fiona/Google Drive/Bhatt lab/Projects/Prebiotic/Prebio2/prebio_scfa_initial.txt"
 scfa1 <- read.table(scfa1_f, sep = '\t', header = T)
@@ -100,26 +91,25 @@ scfa2[is.na(scfa2)] <- 0
 
 # n patients, controls
 print("FOS")
-length(unique(filter(prebio_meta, group == "FOS")$patient_id))
+length(unique(filter(prebio_meta_all, group == "FOS")$patient_id))
 
 print("Controls")
-length(unique(filter(prebio_meta, group == "Control")$patient_id))
+length(unique(filter(prebio_meta_all, group == "Control")$patient_id))
 
 # n samples collected
-length(prebio_meta$sequencing_id[!is.na(prebio_meta$sequencing_id)])
+length(prebio_meta_all$sequencing_id[!is.na(prebio_meta_all$sequencing_id)])
 
 # n samples sequenced
-length(prebio_meta$sequencing_id[prebio_meta$sequenced_status])
+length(prebio_meta_all$sequencing_id[prebio_meta_all$sequenced_status])
 
 # samples collected but not sequenced
-not_seqd <- filter(prebio_meta, !sequenced_status)
+not_seqd <- filter(prebio_meta_all, !sequenced_status)
 # write.table(not_seqd, "/Users/Fiona/Desktop/prebio_not_sequenced.tsv", sep = '\t', quote = F, row.names = F)
 
 # samples collected per patient
-# aggregate(patient_id ~ sequencing_id, prebio_meta, median)
-all_freq <- plyr::count(prebio_meta[!is.na(prebio_meta$sequencing_id),], "patient_id")
-fos_freq <- plyr::count(filter(prebio_meta[!is.na(prebio_meta$sequencing_id),], group == "FOS"), "patient_id")
-ctrl_freq <- plyr::count(filter(prebio_meta[!is.na(prebio_meta$sequencing_id),], group == "Control"), "patient_id")
+all_freq <- plyr::count(prebio_meta_all[!is.na(prebio_meta_all$sequencing_id),], "patient_id")
+fos_freq <- plyr::count(filter(prebio_meta_all[!is.na(prebio_meta_all$sequencing_id),], group == "FOS"), "patient_id")
+ctrl_freq <- plyr::count(filter(prebio_meta_all[!is.na(prebio_meta_all$sequencing_id),], group == "Control"), "patient_id")
 
 # median samples collected per patient
 median(all_freq$freq)
@@ -137,10 +127,10 @@ range(fos_freq$freq)
 range(ctrl_freq$freq)
 
 # samples not sequenced
-filter(prebio_meta, sequenced_status == F & !is.na(date))
+filter(prebio_meta_all, sequenced_status == F & !is.na(date))
 
 # samples not collected
-filter(prebio_meta, sequenced_status == F & is.na(date))
+filter(prebio_meta_all, sequenced_status == F & is.na(date))
 
 
 ######################################################################
@@ -176,7 +166,7 @@ ggsave("plots/readcounts_preproccessing.png", readcount_plot, device = "png", he
 ######################################################################
 
 # plot relative to date of transplant
-samples <- prebio_meta
+samples <- prebio_meta_all
 samples$sample_day <- (samples$date - samples$trx)
 
 # create patient labels, set order
@@ -236,67 +226,12 @@ ggsave("plots/stool_sampling_colored.png", sample_plot2, device = "png", height 
 ### 4. SCFA measurements #############################################
 ######################################################################
 
-## initial measurements
-# scfa_long1 <- melt(scfa1, id.vars = c("sample", "patient_id", "sequencing_id", "group"), variable.name = "scfa")
-# scfa_long1$scfa <- gsub("\\.A", " a", scfa_long1$scfa)
-# 
-# scfa_plot1 <- ggplot(scfa_long1, aes(x=group, y=value)) + 
-#   geom_violin(aes(fill = group), position=position_dodge(.9)) +
-#   facet_grid(. ~ scfa, scales = "free_y") +
-#   # geom_dotplot(binaxis='y', stackdir='center', dotsize=0.2, aes(fill = group), position=position_dodge(.9)) +
-#   stat_summary(fun.data=mean_sdl, mult=1, aes(group=group), position=position_dodge(.9), geom="pointrange", color="black") +
-#   scale_y_log10() +
-#   labs(title='Short-chain fatty acid measurements',
-#        x = "\nShort-chain fatty acid",
-#        y = "Log10 concentration (umol/g stool)\n",
-#        fill="") +
-#   theme_bw() +
-#   scale_fill_manual(values = my_pal) +
-#   my_thm +
-#   theme(
-#     axis.text.x = element_text(size = 18, angle = 20, hjust = 1),
-#     strip.text = element_text(size = 16)
-#   )
-# ggsave("plots/scfa_initial.png", scfa_plot1, device = "png", height = 8, width = 18)
-
-
 ## repeated measurements may 2019
 scfa_long2 <- melt(scfa2, id.vars = c("sample", "patient_id", "sequencing_id", "group"), variable.name = "scfa")
 scfa_long2$scfa <- gsub("\\.A", " a", scfa_long2$scfa)
 
 # set factor level for group
 scfa_long2$group <- factor(scfa_long2$group, levels = c("FOS", "Control"))
-
-# pvals <- compare_means(value ~ group, data = scfa_long2, group.by = "scfa", method = "wilcox.test", p.adjust.method = "fdr")
-# pvals$p.signif <- ifelse(pvals$p.adj < 0.05, "*", "ns")
-# pvals$p.signif <- ifelse(pvals$p.adj < 0.01 & pvals$p.adj >= 0.001, "**", pvals$p.signif)
-# pvals$p.signif <- ifelse(pvals$p.adj < 0.001, "***", pvals$p.signif)
-# pvals$y.position <- 500
-# 
-# # set zeros to 1e-10 for plotting
-# # scfa_long2$value[scfa_long2$value == 0] <- 1e-10
-# 
-# scfa_plot2 <- ggplot(scfa_long2, aes(x = group, y = log10(value + 1))) + 
-#   geom_violin(aes(fill = group), position=position_dodge(.9)) +
-#   facet_grid(. ~ scfa, scales = "free_y") +
-#   # geom_dotplot(binaxis='y', stackdir='center', dotsize=0.2, aes(fill = group), position=position_dodge(.9)) +
-#   stat_summary(fun.data=mean_sdl, mult=1, aes(group=group), position=position_dodge(.9), geom="pointrange", color="black") +
-#   # scale_y_log10() +
-#   # pseudo_log_trans() +
-#   labs(title='Short-chain fatty acid measurements',
-#        x = "\nShort-chain fatty acid",
-#        y = "Log10 concentration (umol/g stool)\n",
-#        fill="") +
-#   theme_bw() +
-#   scale_fill_manual(values = my_pal) +
-#   my_thm +
-#   theme(
-#     axis.text.x = element_text(size = 18, angle = 20, hjust = 1),
-#     strip.text = element_text(size = 16)
-#   ) +
-#   stat_pvalue_manual(pvals, label = "p.signif")
-# ggsave("plots/scfa_may19_log.png", scfa_plot2, device = "png", height = 8, width = 18)
-
 
 ## plot without log transformation, free y axis
 pvals <- compare_means(value ~ group, data = scfa_long2, group.by = "scfa", method = "wilcox.test", p.adjust.method = "fdr")
@@ -308,7 +243,7 @@ pvals$p.signif <- ifelse(pvals$p.adj < 0.001, "***", pvals$p.signif)
 maxs <- aggregate(value ~ scfa,scfa_long2, FUN = max)
 pvals$y.position <- maxs[match(pvals$scfa, maxs$scfa), "value"]*1.10
 
-scfa_plot3 <- ggplot(scfa_long2, aes(x = group, y = value)) + 
+scfa_plot <- ggplot(scfa_long2, aes(x = group, y = value)) + 
   # geom_violin(aes(fill = group), position=position_dodge(.9)) +
   geom_violin(aes(fill = group)) +
   geom_point() +
@@ -318,60 +253,20 @@ scfa_plot3 <- ggplot(scfa_long2, aes(x = group, y = value)) +
   # scale_y_log10() +
   # pseudo_log_trans() +
   labs(
-    x = "\nShort-chain fatty acid",
-    y = "Concentration (umol/g stool)\n",
+    x = "Short-chain fatty acid",
+    y = "Concentration (umol/g stool)",
     fill="") +
-  theme_bw() +
+  theme_cowplot(12) +
   scale_fill_manual(values = my_pal) +
-  my_thm +
-  theme(
-    axis.text.x = element_text(size = 18, angle = 20, hjust = 1),
-    strip.text = element_text(size = 16)
-  ) +
+  # my_thm +
+  # theme(
+  #   axis.text.x = element_text(size = 18, angle = 20, hjust = 1),
+  #   strip.text = element_text(size = 16)
+  # ) +
   stat_pvalue_manual(pvals, label = "p.signif")
-ggsave("plots/scfa_may19_facet.png", scfa_plot3, device = "png", height = 14, width = 12)
 
-# compare two sets of measurements
-# scfa_long1$measurement <- 1
-# scfa_long2$measurement <- 2
-# 
-# scfa_all <- rbind(scfa_long1[, -1], scfa_long2[, -1])
-# scfa_all$group2 <- paste(scfa_all$group, scfa_all$measurement, sep = '_')
-# scfa_all$group2 <- factor(scfa_all$group2, levels = c("Control_1", "FOS_1", "Control_2", "FOS_2"))
-# 
-# scfa_compare <- ggplot(scfa_all, aes(x=group2, y=value)) + 
-#   geom_violin(aes(fill = group2), position=position_dodge(.9)) +
-#   facet_wrap(. ~ scfa, scales = "free_y") +
-#   # geom_dotplot(binaxis='y', stackdir='center', dotsize=0.2, aes(fill = group), position=position_dodge(.9)) +
-#   stat_summary(fun.data=mean_sdl, mult=1, aes(group=group2), position=position_dodge(.9), geom="pointrange", color="black") +
-#   scale_y_log10() +
-#   labs(title='Short-chain fatty acid measurements',
-#        x = "\nShort-chain fatty acid",
-#        y = "Log10 concentration (umol/g stool)\n",
-#        fill="") +
-#   theme_bw() +
-#   my_thm +
-#   theme(
-#     axis.text.x = element_text(size = 18, angle = 20, hjust = 1),
-#     strip.text = element_text(size = 16)
-#   )
-# ggsave("plots/scfa_compare.png", scfa_compare, device = "png", height = 10, width = 11)
-# 
-# 
-# # plot spearman correlation
-# scfa_all_wide <- dcast(scfa_all, patient_id + sequencing_id + group + scfa ~ measurement, value.var = "value")
-# sc <- cor(scfa_all_wide$`1`, scfa_all_wide$`2`, method="spearman")
-# 
-# corr_plot <- ggplot(scfa_all_wide, aes(x=`1`, y=`2`)) + 
-#   geom_point() + 
-#   labs(title='Short-chain fatty acid MS correlation',
-#        x = "Measurement 1",
-#        y = "Measurement 2",
-#        fill="") +
-#   theme_bw() +
-#   my_thm +
-#   annotate("text", x = 750, y = 750, label = paste("Spearmann correlation =", sc))
-# ggsave("plots/scfa_compare_corr.png", corr_plot, device = "png", height = 6, width = 6)
+ggsave("plots/scfa_may19_facet.png", scfa_plot, device = "png", height = 9, width = 8)
+
 
 ######################################################################
 ### 5. Classified reads ##############################################
@@ -380,18 +275,17 @@ ggsave("plots/scfa_may19_facet.png", scfa_plot3, device = "png", height = 14, wi
 ## Plot histogram of classified reads
 classified <- (1 - sweep(brack_sp, 2, colSums(brack_sp), "/")["Unclassified",]) * 100
 
-g <- ggplot(melt(classified), aes(x=value)) +
+read_plot <- ggplot(melt(classified), aes(x=value)) +
   geom_histogram(binwidth = 1, fill = "cornflowerblue", color = "white") +
   scale_x_continuous(breaks = seq(0, 100, 10)) +
-  theme_bw() +
-  my_thm +
+  theme_cowplot(12) +
   scale_fill_manual(values = my_pal) +
   labs(
-    title = "Classified read fraction\n",
-    x = "\nPercentage of reads classified",
-    y = "Count\n"
+    x = "Percentage of reads classified",
+    y = "Count"
   )
-# ggsave("plots/readcounts_classified_histo.png", g, device = "png", height = 8, width = 8)
+
+ggsave("plots/readcounts_classified_histo.png", read_plot, device = "png", height = 4, width = 5)
 
 ######################################################################
 ### 6. Diversity plots ###############################################
@@ -400,49 +294,23 @@ g <- ggplot(melt(classified), aes(x=value)) +
 ## shannon diversity over time
 
 # find shannon diversity with vegdist
-shannon_div <- diversity(t(brack_sp_norm), index = "shannon")
+shannon_div <- diversity(t(brack_sp_perc), index = "shannon")
 div <- data.frame("shannon_div" = shannon_div, "sequencing_id" = names(shannon_div))
 div_meta <- merge(div, prebio_meta, by = "sequencing_id")
 
-# individual line plots of diversity over time by case/control
-# g <- ggplot(div_meta, aes(day, shannon_div, group = patient_id, color = group)) +
-#   geom_line() +
-#   geom_point() +
-#   labs(title='Shannon diversity by individual over time',
-#        subtitle='',
-#        x = "Day",
-#        y = "Shannon Diversity\n",
-#        fill="Treatment") +
-#   # scale_fill_manual(values=my_pal, guide = guide_legend(ncol = 1)) +
-#   theme_classic() +
-#   theme(
-#     axis.text.x = element_text(size = 18, angle = 45, hjust = 1)
-#   ) +
-#   scale_color_manual(values = my_pal) +
-#   scale_x_continuous(labels = comma, breaks = c(-5, 0, 7, 14, 28, 60, 100)) +
-#   my_thm
-# ggsave("plots/shannon_line.png", g, device = "png", height = 8, width = 10)
-
-
 ## stat smooth shannon diversity over time
-g2 <- ggplot(div_meta, aes(day, shannon_div, color = group)) +
-  # geom_line() +
+shannon_plot_smooth <- ggplot(div_meta, aes(day, shannon_div, color = group)) +
   geom_point() +
   stat_smooth() +
-  labs(title='Shannon diversity by individual over time',
-       subtitle='',
+  labs(
        x = "Day",
-       y = "Shannon Diversity\n",
-       fill="Treatment") +
-  # scale_fill_manual(values=my_pal, guide = guide_legend(ncol = 1)) +
-  theme_bw() +
-  theme(
-    axis.text.x = element_text(size = 18, angle = 45, hjust = 1)
-  ) +
+       y = "Shannon Diversity",
+       color="") +
+  theme_cowplot(12) +
   scale_color_manual(values = my_pal) +
-  scale_x_continuous(labels = comma, breaks = c(-5, 0, 7, 14, 28, 60, 100)) +
-  my_thm
-ggsave("plots/shannon_line_smooth.png", g2, device = "png", height = 8, width = 10)
+  scale_x_continuous(labels = comma, breaks = c(-5, 0, 7, 14, 28, 60, 100))
+
+ggsave("plots/shannon_line_smooth.png", shannon_plot_smooth, device = "png", height = 4, width = 6)
 
 
 ## Violin plot -- alpha diversity each day
@@ -455,29 +323,27 @@ pvals$p.signif <- ifelse(pvals$p.adj < 0.001, "***", pvals$p.signif)
 pvals$y.position <- 8
 
 # plot
-g <- ggplot(div_meta, aes(x=group, y=shannon_div)) + 
+shannon_plot <- ggplot(div_meta, aes(x=group, y=shannon_div)) + 
   geom_violin(aes(fill = group), position=position_dodge(.9), trim = F) +
   stat_summary(fun.data=mean_sdl, aes(group=group), position=position_dodge(.9), geom="pointrange", color="black") +
   facet_grid(. ~ day, scales = "free") +
-  labs(title='Shannon diversity at all timepoints',
+  labs(
        x = "\nTreatment",
        y = "Shannon Diversity\n",
        fill="") +
-  theme_bw() +
+  theme_cowplot(12) +
   scale_fill_manual(values = my_pal) +
-  my_thm +
   stat_pvalue_manual(pvals, label = "p.signif")
-# ggsave("plots/shannon_div.png", g, device = "png", height = 6, width = 14)
 
-# shapiro wilks test for normality
-# shapiro.test(day14_div$shannon_div)
+ggsave("plots/shannon_div.png", shannon_plot, device = "png", height = 4, width = 10)
+
 
 ######################################################################
 ### 7. Taxonomy stream plots #########################################
 ######################################################################
 
 ## species
-plot_data <- brack_sp_norm
+plot_data <- brack_sp_perc
 plot_data$taxon <- row.names(plot_data)
 data_long <- melt(plot_data, id.vars = "taxon", variable.name = "sequencing_id", value.name = "rel_abundance")
 data_long_meta <- merge(data_long, prebio_meta, by = "sequencing_id")
@@ -594,11 +460,11 @@ relab <- 30
 entero <- filter(data_long_meta, rel_abundance > relab)
 
 # n controls with enterodomination at any tp
-write.table(filter(entero, group == "FOS"), "plots/tables/FOS_enterodomination.tsv", sep = '\t', row.names = F, quote = F)
+# write.table(filter(entero, group == "FOS"), "plots/tables/FOS_enterodomination.tsv", sep = '\t', row.names = F, quote = F)
 length(unique(filter(entero, group == "FOS")$patient_id))
 
 # n cases with enterodomination at any tp
-write.table(filter(entero, group == "Control"), "plots/tables/control_enterodomination.tsv", sep = '\t', row.names = F, quote = F)
+# write.table(filter(entero, group == "Control"), "plots/tables/control_enterodomination.tsv", sep = '\t', row.names = F, quote = F)
 length(unique(filter(entero, group == "Control")$patient_id))
 
 plyr::count(entero, "patient_id")
@@ -607,17 +473,10 @@ plyr::count(entero, "patient_id")
 ### 9. NMDS ordination ###############################################
 ######################################################################
 
-### ordinate species-level classifications -- bray curtis distance
-
-## filter low abundance features with genefilter
-# filter features lower than 1% relative abundance, in 2% of samples
-keep <- data.frame(genefilter(brack_sp_perc, pOverA(p=0.02, A=0.01)))
-keep$tax <- row.names(keep)
-keep <- filter(keep, `genefilter.brack_sp_perc..pOverA.p...0.02..A...0.01..` == T)$tax
-brack_sp_filt <- brack_sp_perc[keep, ]
+### ordinate species-level classifications
 
 ### find pairwise bray-curtis distances with vegdist
-vare_dis <- vegdist(t(brack_sp_filt), method = "bray")
+vare_dis <- vegdist(t(brack_sp_perc), method = "bray")
 
 ### nmds ordinate
 vare_mds0 <- isoMDS(vare_dis)
@@ -628,229 +487,27 @@ mds$sequencing_id <- row.names(mds)
 mds_meta <- merge(mds, prebio_meta, by = "sequencing_id")
 
 ### function to create scatterplot
-nmds_plot <- function(in_data, color_by){
-  my_plot <- ggplot(in_data, aes(x = X1, y = X2, color = in_data[, color_by])) +
-    geom_point(size = 3) +
-    theme_bw() +
-    scale_color_manual(values = my_pal) +
-    labs(title='Species-level beta diversity (Bray-Curtis)',
-         subtitle='Nonmetric multidimensional scaling',
-         x = "NMDS1",
-         y = "NMDS2",
-         color=color_by) +
-    my_thm +
-    xlim(-2.5, 1.1) +
-    ylim(-1.5, 1)
-  
-  return(my_plot)
-}
-
-## plot by treatment
-nmds <- nmds_plot(mds_meta, "group")
-ggsave("plots/nmds_by_treatment.png", nmds, device = "png", height = 8, width = 10)
-# ggsave("plots_defense/nmds_by_treatment.png", nmds, device = "png", height = 6, width = 8)
-
-## plot by treatment plus 95% confidence ellipse
-nmds2 <- nmds + stat_ellipse(type = 't', size = 1)
-ggsave("plots/nmds_by_treatment_ci.png", nmds2, device = "png", height = 8, width = 10)
-# ggsave("plots_defense/nmds_by_treatment_cu.png", nmds2, device = "png", height = 6, width = 8)
-
-## plot by patient
-# TO DO switch up color palette
-nmds3 <- nmds_plot(mds_meta, "patient_id") + geom_line()
-
-## plot by timepoint
-# TO DO switch up color palette
-nmds4 <- nmds_plot(mds_meta, "day") + geom_line()
-
-## plot species contributing to sample positioning (adapted from Jessy/Ryan)
-# calculate weighted species score
-mds_values <- vare_mds0$points
-wascores <- wascores(mds_values, t(brack_sp_filt))
-wascores <- data.frame(Sample=rownames(wascores),
-                       X1=wascores[,1],
-                       X2=wascores[,2])
-
-# isolate taxa with strongest contribution to principal coordinate axes
-wascores_1<- head(arrange(wascores,desc(abs(wascores$X1))),n=20)
-wascores_2<- head(arrange(wascores,desc(abs(wascores$X2))),n=20)
-wascores_final <- rbind(wascores_1,wascores_2)
-
-# plot features, repel labels
-nmds5 <- ggplot(mds_meta, aes(x = X1, y = X2, color = group)) +
-  geom_point(size = 3) +
-  theme_bw() +
-  labs(title='Species-level beta diversity (Bray-Curtis)',
-       subtitle='Nonmetric multidimensional scaling',
-       x = "NMDS1",
-       y = "NMDS2",
-       color="") +
+nmds_plot <- ggplot(mds_meta, aes(x = X1, y = X2, color = group)) +
+  geom_point(size = 2) +
+  theme_cowplot(12) +
   scale_color_manual(values = my_pal) +
-  my_thm +
-  geom_text_repel(data=wascores_final, aes(label = Sample), color="red",size=3)
-ggsave("plots/nmds_group_features.png", nmds5, device = "png", height = 8, width = 10)
-# ggsave("plots_defense/nmds_group_features.png", nmds5, device = "png", height = 6, width = 8)
-
-## nmds plot by shannon diversity
-plot_data <- merge(mds_meta, div, by = "sequencing_id")
-nmds_div <- ggplot(plot_data, aes(x = X1, y = X2, shape = group, color = shannon_div)) +
-  geom_point(size = 3) +
-  # geom_text(aes(label = day), hjust = 1, vjust = 1, size = 6) + 
-  # scale_color_manual(values = my_pal) +
-  theme_bw() +
-  labs(title='Species-level beta diversity (Bray-Curtis)',
-       subtitle='Nonmetric multidimensional scaling, Shannon diversity',
+  labs(
        x = "NMDS1",
        y = "NMDS2",
-       color = "patient_id",
-       legend = "Shannon Diversity") +
-  my_thm
-ggsave("plots/nmds_shannon_div.png", nmds_div, device = "png", height = 8, width = 10)
+       color = ""
+       )
 
-# plot by shannon diversity with labels
-nmds_div2 <- nmds_div + geom_text(aes(label = day), hjust = 1, vjust = 1, size = 6)
-ggsave("plots/nmds_shannon_div_labeled.png", nmds_div2, device = "png", height = 8, width = 10)
+# add 95% confidence ellipse
+nmds_plot_ci <- nmds_plot + stat_ellipse(type = 't', size = 1)
 
-# plot by shannon diversity with labels with taxa
-nmds_div3 <- nmds_div2 + geom_text_repel(data=wascores_final, aes(x= X1, y= X2, label = Sample), color="red", size=3, inherit.aes = F)
-ggsave("plots/nmds_shannon_div_labeled_features.png", nmds_div3, device = "png", height = 8, width = 10)
+ggsave("plots/nmds_by_treatment_ci.png", nmds_plot_ci, device = "png", height = 5, width = 6)
 
-ggsave("plots/nmds_shannon_div_labeled.png", nmds_div2, device = "png", height = 8, width = 10)
+# test group differences
+# beta dispersions -- are assumptions for PERMANOVA met?
+dispersion <- betadisper(vare_dis, group = prebio_meta$group)
+permutest(dispersion)
 
-
-## plot trajectory by patient, label points with day
-myCols <- colorRampPalette(brewer.pal(12, "Paired"))
-my_pal <- myCols(16)
-my_pal <- sample(my_pal)
-my_data <- mds_meta
-my_data <- my_data[order(my_data$day), ]
-
-# my_data$day <- factor(my_data$day, levels = c(-5, 0, 7, 14, 28, 60, 100))
-
-# FOS patients
-my_plot <- ggplot(filter(my_data, group == "FOS"), aes(x = X1, y = X2, color = patient_id)) +
-  geom_point(size = 3) +
-  geom_text(aes(label = day), hjust = 1, vjust = 1, size = 6) + 
-  scale_color_manual(values = my_pal) +
-  theme_bw() +
-  labs(title='Species-level beta diversity (Bray-Curtis), FOS',
-       subtitle='Nonmetric multidimensional scaling',
-       x = "NMDS1",
-       y = "NMDS2",
-       color = "patient_id") +
-  my_thm +
-  geom_path()
-ggsave("plots/nmds_fos_trajectory.png", my_plot, device = "png", height = 8, width = 10)
-
-# control patients
-my_plot <- ggplot(filter(my_data, group == "Control"), aes(x = X1, y = X2, color = patient_id)) +
-  geom_point(size = 3) +
-  geom_text(aes(label = day), hjust = 1, vjust = 1, size = 6) + 
-  scale_color_manual(values = my_pal) +
-  theme_bw() +
-  labs(title='Species-level beta diversity (Bray-Curtis), Controls',
-       subtitle='Nonmetric multidimensional scaling',
-       x = "NMDS1",
-       y = "NMDS2",
-       color = "patient_id") +
-  my_thm +
-  geom_path()
-ggsave("plots/nmds_control_trajectory.png", my_plot, device = "png", height = 8, width = 10)
-
-
-### Canberra distance -- useful for data scattered around an origin
-
-### ordinate species-level classifications -- canberra distance
-## filter low abundance features with genefilter
-# filter features lower than 1% relative abundance, in 2% of samples
-keep <- data.frame(genefilter(brack_sp_perc, pOverA(p=0.02, A=0.01)))
-keep$tax <- row.names(keep)
-keep <- filter(keep, `genefilter.brack_sp_perc..pOverA.p...0.02..A...0.01..` == T)$tax
-brack_sp_filt <- brack_sp_perc[keep, ]
-
-### find pairwise bray-curtis distances with vegdist
-vare_dis <- vegdist(t(brack_sp_filt), method = "canberra")
-
-### nmds ordinate
-vare_mds0 <- isoMDS(vare_dis)
-mds <- data.frame(vare_mds0$points)
-mds$sequencing_id <- row.names(mds)
-
-### merge pheno data
-mds_meta <- merge(mds, prebio_meta, by = "sequencing_id")
-
-### function to create scatterplot
-nmds_plot <- function(in_data, color_by){
-  my_plot <- ggplot(in_data, aes(x = X1, y = X2, color = in_data[, color_by])) +
-    geom_point(size = 3) +
-    theme_bw() +
-    labs(title='Species-level beta diversity (Canberra)',
-         subtitle='Nonmetric multidimensional scaling',
-         x = "NMDS1",
-         y = "NMDS2",
-         color=color_by) +
-    my_thm
-  
-  return(my_plot)
-}
-
-## plot by treatment
-nmds <- nmds_plot(mds_meta, "group")
-# ggsave("plots/nmds_by_treatment_canberra.png", nmds, device = "png", height = 8, width = 10)
-
-## plot by treatment plus 95% confidence ellipse
-nmds2 <- nmds + stat_ellipse(type = 't', size = 1)
-# ggsave("plots/nmds_by_treatment_ci_canberra.png", nmds2, device = "png", height = 8, width = 10)
-
-## plot species contributing to sample positioning (adapted from Jessy/Ryan)
-# calculate weighted species score
-mds_values <- vare_mds0$points
-wascores <- wascores(mds_values, t(brack_sp_filt))
-wascores <- data.frame(Sample=rownames(wascores),
-                       X1=wascores[,1],
-                       X2=wascores[,2])
-
-# isolate taxa with strongest contribution to principal coordinate axes
-wascores_1<- head(arrange(wascores,desc(abs(wascores$X1))),n=30)
-wascores_2<- head(arrange(wascores,desc(abs(wascores$X2))),n=30)
-wascores_final <- rbind(wascores_1,wascores_2)
-
-# plot features, repel labels
-nmds5 <- ggplot(mds_meta, aes(x = X1, y = X2, color = group)) +
-  geom_point(size = 3) +
-  theme_bw() +
-  labs(title='Species-level beta diversity (Bray-Curtis)',
-       subtitle='Nonmetric multidimensional scaling',
-       x = "NMDS1",
-       y = "NMDS2",
-       color="") +
-  my_thm +
-  geom_text_repel(data=wascores_final, aes(label = Sample), color="red",size=3)
-# ggsave("plots/nmds_group_features_canberra.png", nmds5, device = "png", height = 8, width = 10)
-
-## nmds plot by shannon diversity
-plot_data <- merge(mds_meta, div, by = "sequencing_id")
-nmds_div <- ggplot(plot_data, aes(x = X1, y = X2, shape = group, color = shannon_div)) +
-  geom_point(size = 3) +
-  # geom_text(aes(label = day), hjust = 1, vjust = 1, size = 6) + 
-  # scale_color_manual(values = my_pal) +
-  theme_bw() +
-  labs(title='Species-level beta diversity (Bray-Curtis)',
-       subtitle='Nonmetric multidimensional scaling, Shannon diversity',
-       x = "NMDS1",
-       y = "NMDS2",
-       color = "patient_id",
-       legend = "Shannon Diversity") +
-  my_thm
-# ggsave("plots/nmds_shannon_div_canberra.png", nmds_div, device = "png", height = 8, width = 10)
-
-# plot by shannon diversity with labels
-nmds_div2 <- nmds_div + geom_text(aes(label = day), hjust = 1, vjust = 1, size = 6)
-# ggsave("plots/nmds_shannon_div_labeled_canberra.png", nmds_div2, device = "png", height = 8, width = 10)
-
-# plot by shannon diversity with labels with taxa
-nmds_div3 <- nmds_div2 + geom_text_repel(data=wascores_final, aes(x= X1, y= X2, label = Sample), color="red", size=3, inherit.aes = F)
-# ggsave("plots/nmds_shannon_div_labeled_features_canberra.png", nmds_div3, device = "png", height = 8, width = 10)
+adonis(vare_dis ~ group, data = filter(prebio_meta, sequenced_status == T))
 
 ######################################################################
 ### 10. Boxplots of specific features #################################
@@ -1033,15 +690,4 @@ ggsave("plots/lefse_boxplot_sp_filtered.png", lefse_boxplot("sp", brack_sp_perc,
 
 ggsave("plots/lefse_boxplot_g_unfiltered.png", lefse_boxplot("g", brack_g_perc, "unfiltered"), device = "png", height = 10, width = 10)
 ggsave("plots/lefse_boxplot_sp_unfiltered.png", lefse_boxplot("sp", brack_sp_perc, "unfiltered"), device = "png", height = 30, width = 30)
-######################################################################
-### 13. CAZyme annotations ###########################################
-######################################################################
-
-# read cazyme annotations
-cazy <- read.table("04_cazy/cazy_diamond_all.tsv", sep = '\t')
-colnames(cazy) <- c("cazyme", "freq", "sample")
-
-# cast to wide format
-cazy_counts_wide <- dcast(cazy, cazyme ~ sample, value.var = "freq")
-cazy_counts_wide[is.na(cazy_counts_wide)] <- 0
 
