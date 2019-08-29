@@ -3,19 +3,15 @@
 
 # required packages
 library(ggplot2)
-# # library(ggrepel)
 library(genefilter)
 library(RColorBrewer)
 library(plyr)
 library(dplyr)
-# library(zoo)
 library(reshape2)
 library(scales)
 library(gtools)
 library(vegan)
-# library(MASS)
 library(ggpubr)
-# library(ggbeeswarm)
 library(cowplot)
 
 ######################################################################
@@ -395,87 +391,8 @@ subset_lefse(brack_g_perc * 1e6, 14, 0.01, 0.10, "g")
 subset_lefse(brack_sp_perc * 1e6, 14, 0, 0, "sp")
 subset_lefse(brack_g_perc * 1e6, 14, 0, 0, "g")
 
-
-######################################################################
-### Process/plot lefse results #######################################
-######################################################################
-
-# ## plot lefse barplot results
-# cols <- c("feature", "log_class_avg", "class", "lda_effect_size", "p_value")
-# lda <- 2
-# 
-# # function to plot lefse results
-# read_lefse <- function(fname){
-#   lefse_res <- read.table(fname, sep = '\t')
-#   colnames(lefse_res) <- cols
-#   
-#   lefse_res <- filter(lefse_res, lda_effect_size > lda)
-#   lefse_res$feature <- gsub('_', ' ', lefse_res$feature)
-#   lefse_res$feature <- gsub(' sp ', ' sp. ', lefse_res$feature)
-#   
-#   # flip control axis
-#   lefse_res$lda_effect_size <- ifelse(lefse_res$class == "Control", -1 * lefse_res$lda_effect_size, lefse_res$lda_effect_size)
-#   lefse_res <- lefse_res[order(lefse_res$lda_effect_size), ]
-#   lefse_res$feature <- factor(lefse_res$feature, levels = lefse_res$feature)
-#   lefse_res
-# }
-# 
-# plot_lefse <- function(lefse_res) {
-#   lefse_plot <- ggplot(lefse_res, aes(x=feature, y=lda_effect_size, fill=class)) + 
-#     geom_bar(stat='identity', aes(fill=class), width = 0.75)  +
-#     labs(
-#       y = "LDA Effect Size",
-#       x = "Feature"
-#     ) + 
-#     coord_flip() +
-#     theme_bw() +
-#     scale_fill_manual(values = my_pal) +
-#     scale_y_continuous(breaks = seq(-4, 4, 1)) +
-#     theme_cowplot(12)
-#   
-#   lefse_plot
-# }
-# 
-# ggsave("plots/lefse_sp_results_filtered.png", plot_lefse(read_lefse("03_lefse/lefse_sp_relab0.1_prev2_day14/lefse_sp_relab0.1_prev2_day14.res")), device = "png", height = 6, width = 12)
-# ggsave("plots/lefse_g_results_filtered.png", plot_lefse(read_lefse("03_lefse/lefse_g_relab0.1_prev2_day14/lefse_g_relab0.1_prev2_day14.res")), device = "png", height = 3, width = 12)
-# 
-# 
-# ## plot significant features from lefse
-# # plot function
-# lefse_boxplot <- function(level, taxa_df, filter){
-#   plot_data <- taxa_df
-#   plot_data$taxon <- row.names(plot_data)
-#   data_long <- melt(plot_data, id.vars = "taxon", variable.name = "sequencing_id", value.name = "rel_abundance")
-#   data_long_meta <- merge(data_long, prebio_meta, by = "sequencing_id")
-#   
-#   taxa <- read_lefse(level, filter)$feature
-#   data_filt <- filter(data_long_meta, taxon %in% taxa, day == 14)
-#   
-#   lefse_boxplot <- ggplot(data_filt, aes(x=group, y=rel_abundance)) + 
-#     geom_boxplot(aes(fill = group), position=position_dodge(.9)) +
-#     # geom_dotplot(binaxis='y', stackdir='center', dotsize=0.2, aes(fill = Treatment), position=position_dodge(.9)) +
-#     # stat_summary(fun.data=mean_sdl, mult=1, aes(group=group), position=position_dodge(.9), geom="pointrange", color="black") +
-#     facet_wrap(. ~ taxon, scales = "free") +
-#     # scale_y_log10() +
-#     labs(title='',
-#          x = "\nGroup",
-#          y = "Relative abundance (%)\n",
-#          fill="") +
-#     theme_bw() +
-#     # my_thm +
-#     theme(
-#       axis.text.x = element_text(size = 12, angle = 20, hjust = 1),
-#       strip.text = element_text(size = 12)
-#     )
-#   lefse_boxplot
-# }
-# 
-# ggsave("plots/lefse_boxplot_g_filtered.png", lefse_boxplot("g", brack_g_perc, "filtered"), device = "png", height = 10, width = 10)
-# ggsave("plots/lefse_boxplot_sp_filtered.png", lefse_boxplot("sp", brack_sp_perc, "filtered"), device = "png", height = 10, width = 10)
-# 
-# ggsave("plots/lefse_boxplot_g_unfiltered.png", lefse_boxplot("g", brack_g_perc, "unfiltered"), device = "png", height = 10, width = 10)
-# ggsave("plots/lefse_boxplot_sp_unfiltered.png", lefse_boxplot("sp", brack_sp_perc, "unfiltered"), device = "png", height = 30, width = 30)
-
+# next, run lefse on the Huttenhower lab galaxy server (https://huttenhower.sph.harvard.edu/galaxy/)
+# or on the command line
 
 ######################################################################
 ### Taxonomy area plots ##############################################
@@ -565,24 +482,24 @@ for (patient in patient_list) {
 ### Boxplots of specific features ####################################
 ######################################################################
 
-plot_data <- brack_g_perc
-plot_data$taxon <- row.names(plot_data)
-data_long <- melt(plot_data, id.vars = "taxon", variable.name = "sequencing_id", value.name = "rel_abundance")
-data_long_meta <- merge(data_long, prebio_meta, by = "sequencing_id")
-
-taxa <- c("Lactobacillus", "Blautia")
-data_filt <- filter(data_long_meta, taxon %in% taxa, day == 14)
-
-tax_boxplot <- ggplot(data_filt, aes(x=taxon, y=rel_abundance)) + 
-  geom_boxplot(aes(fill = group), position=position_dodge(.9)) +
-  # geom_dotplot(binaxis='y', stackdir='center', dotsize=0.2, aes(fill = Treatment), position=position_dodge(.9)) +
-  # stat_summary(fun.data=mean_sdl, mult=1, aes(group=group), position=position_dodge(.9), geom="pointrange", color="black") +
-  facet_wrap(. ~ taxon, scales = "free") +
-  # scale_y_log10() +
-  labs(title='',
-       x = "\nGenus",
-       y = "Relative abundance (%)\n",
-       fill="") +
-  theme_cowplot(12)
-
-ggsave("plots/lefse_g_boxplot.png", tax_boxplot, device = "png", height = 4, width = 2.5 * length(taxa))
+# plot_data <- brack_g_perc
+# plot_data$taxon <- row.names(plot_data)
+# data_long <- melt(plot_data, id.vars = "taxon", variable.name = "sequencing_id", value.name = "rel_abundance")
+# data_long_meta <- merge(data_long, prebio_meta, by = "sequencing_id")
+# 
+# taxa <- c("Lactobacillus", "Blautia")
+# data_filt <- filter(data_long_meta, taxon %in% taxa, day == 14)
+# 
+# tax_boxplot <- ggplot(data_filt, aes(x=taxon, y=rel_abundance)) + 
+#   geom_boxplot(aes(fill = group), position=position_dodge(.9)) +
+#   # geom_dotplot(binaxis='y', stackdir='center', dotsize=0.2, aes(fill = Treatment), position=position_dodge(.9)) +
+#   # stat_summary(fun.data=mean_sdl, mult=1, aes(group=group), position=position_dodge(.9), geom="pointrange", color="black") +
+#   facet_wrap(. ~ taxon, scales = "free") +
+#   # scale_y_log10() +
+#   labs(title='',
+#        x = "\nGenus",
+#        y = "Relative abundance (%)\n",
+#        fill="") +
+#   theme_cowplot(12)
+# 
+# ggsave("plots/lefse_g_boxplot.png", tax_boxplot, device = "png", height = 4, width = 2.5 * length(taxa))
