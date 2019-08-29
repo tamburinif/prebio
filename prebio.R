@@ -380,7 +380,6 @@ subset_lefse <- function(bracken_data, filt_day, relab, prop, rank){
   write.table(lefse_meta_t, fname, sep = '\t', row.names = T, col.names = F, quote = F)
   write.table(tax_filt, fname, sep = '\t', row.names = T, col.names = F, quote = F, append = T)
   
-  colSums(tax_filt)
   # print(F %in% (colnames(tax) == lefse_meta_t[1,]))
 }
 
