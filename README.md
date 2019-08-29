@@ -6,7 +6,7 @@
 
 1. Clone this repo
 
-    `git clone`
+    `git clone https://github.com/tamburinif/prebio.git`
 
 2. Open the R script and run. You may have to install packages -- this can be done e.g.
 
