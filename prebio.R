@@ -3,27 +3,26 @@
 
 # required packages
 library(ggplot2)
-library(ggrepel)
-library(RColorBrewer)
-library(plyr)
+# # library(ggrepel)
+# # library(RColorBrewer)
+# library(plyr)
 library(dplyr)
-library(zoo)
+# library(zoo)
 library(reshape2)
-library(scales)
+# library(scales)
 library(gtools)
-library(vegan)
-library(MASS)
-library(genefilter)
-library(ggpubr)
-library(ggbeeswarm)
-library(cowplot)
+# library(vegan)
+# library(MASS)
+# library(ggpubr)
+# library(ggbeeswarm)
+# library(cowplot)
 
 ######################################################################
 ### Setup ############################################################
 ######################################################################
 
-# set this to /your/path/to/prebio2
-setwd("/Users/Fiona/scg4_fiona/prebio2/")
+### set this to /your/path/to/prebio2
+setwd("/Users/Fiona/scg4_fiona/prebio2/prebio")
 
 # color palette
 # FOS, Control
@@ -38,7 +37,7 @@ names(my_pal) <- c("FOS", "Control")
 # TO DO: remove P83 and re-save
 
 ### Read sample metadata -- which stools were collected/sequenced
-prebio_meta_all <- read.table("00_metadata/prebio_meta.tsv", sep = '\t', header = T, quote="\"")
+prebio_meta_all <- read.table("metadata/prebio_meta.tsv", sep = '\t', header = T, quote="\"")
 
 # set FOS/Control grouping
 prebio_meta_all$group <- ifelse(startsWith(as.character(prebio_meta_all$patient_id), '303'), "FOS", "Control")
@@ -57,12 +56,13 @@ prebio_meta <- prebio_meta[mixedorder(unique(prebio_meta$sequencing_id)), ]
 
 ### Read taxonomic classification data
 ## bracken species read counts including unclassifed
-brack_sp <- read.table("02_kraken2_feb2019/processed_results/taxonomy_matrices/bracken_species_reads.txt", sep = '\t', header = T, quote = "")
-brack_g <- read.table("02_kraken2_feb2019/processed_results/taxonomy_matrices/bracken_genus_reads.txt", sep = '\t', header = T, quote = "")
+brack_sp <- read.table("input_data/bracken_species_reads.txt", sep = '\t', header = T, quote = "")
+brack_g <- read.table("input_data/bracken_genus_reads.txt", sep = '\t', header = T, quote = "")
 
-# relative abundance normalized -- classified/no human only
-brack_sp_filt <- brack_sp[!rownames(brack_sp) %in% c("Unclassified", "Homo sapiens"),]
-brack_g_filt <- brack_g[!rownames(brack_g) %in% c("Unclassified", "Homo"),]
+# relative abundance normalize -- classified/no human only
+remove <- c("Unclassified", "Homo sapiens")
+brack_sp_filt <- brack_sp[!rownames(brack_sp) %in% remove,]
+brack_g_filt <- brack_g[!rownames(brack_g) %in% remove,]
 brack_sp_perc <- sweep(brack_sp_filt, 2, colSums(brack_sp_filt), "/")
 brack_g_perc <- sweep(brack_g_filt, 2, colSums(brack_g_filt), "/")
 
@@ -73,6 +73,9 @@ brack_g_perc[, "P83"] <- NULL
 # set order
 brack_sp_perc <- brack_sp_perc[, mixedorder(unique(prebio_meta$sequencing_id))]
 brack_g_perc <- brack_g_perc[, mixedorder(unique(prebio_meta$sequencing_id))]
+
+write.table(brack_sp_perc, "input_data/bracken_species_perc.txt", sep = "\t", row.names = F, quote = F)
+write.table(brack_g_perc, "input_data/bracken_genus_perc.txt", sep = "\t", row.names = F, quote = F)
 
 ## Read short chain fatty acid measurements
 # initial
@@ -86,7 +89,7 @@ scfa2 <- read.table(scfa2_f, sep = '\t', header = T)
 scfa2[is.na(scfa2)] <- 0
 
 ######################################################################
-### 1. Summary statistics ############################################
+### Summary statistics ###############################################
 ######################################################################
 
 # n patients, controls
@@ -134,7 +137,7 @@ filter(prebio_meta_all, sequenced_status == F & is.na(date))
 
 
 ######################################################################
-### 2. Readcount plots ###############################################
+### Readcount plots ##################################################
 ######################################################################
 
 # readcounts file from preprocessing pipeline
@@ -162,7 +165,7 @@ ggsave("plots/readcounts_preproccessing.png", readcount_plot, device = "png", he
 
 
 ######################################################################
-### 3. Sample collection plot ########################################
+### Sample collection plot ###########################################
 ######################################################################
 
 # plot relative to date of transplant
@@ -223,7 +226,7 @@ ggsave("plots/stool_sampling_colored.png", sample_plot2, device = "png", height 
 
 
 ######################################################################
-### 4. SCFA measurements #############################################
+### SCFA measurements ################################################
 ######################################################################
 
 ## repeated measurements may 2019
@@ -269,7 +272,7 @@ ggsave("plots/scfa_may19_facet.png", scfa_plot, device = "png", height = 9, widt
 
 
 ######################################################################
-### 5. Classified reads ##############################################
+### Classified reads #################################################
 ######################################################################
 
 ## Plot histogram of classified reads
@@ -288,7 +291,7 @@ read_plot <- ggplot(melt(classified), aes(x=value)) +
 ggsave("plots/readcounts_classified_histo.png", read_plot, device = "png", height = 4, width = 5)
 
 ######################################################################
-### 6. Diversity plots ###############################################
+### Diversity plots ##################################################
 ######################################################################
 
 ## shannon diversity over time
@@ -339,7 +342,7 @@ ggsave("plots/shannon_div.png", shannon_plot, device = "png", height = 4, width 
 
 
 ######################################################################
-### 7. Taxonomy stream plots #########################################
+### Taxonomy stream plots ############################################
 ######################################################################
 
 ## species
@@ -446,31 +449,7 @@ for (patient in patient_list) {
 
 
 ######################################################################
-### 8. Enterodomination ##############################################
-######################################################################
-
-# all metagenomic samples with a dominating organism at day 14
-plot_data <- brack_sp_perc
-plot_data$taxon <- row.names(plot_data)
-data_long <- melt(plot_data, id.vars = "taxon", variable.name = "sequencing_id", value.name = "rel_abundance")
-data_long_meta <- merge(data_long, prebio_meta, by = "sequencing_id")
-
-relab <- 30
-
-entero <- filter(data_long_meta, rel_abundance > relab)
-
-# n controls with enterodomination at any tp
-# write.table(filter(entero, group == "FOS"), "plots/tables/FOS_enterodomination.tsv", sep = '\t', row.names = F, quote = F)
-length(unique(filter(entero, group == "FOS")$patient_id))
-
-# n cases with enterodomination at any tp
-# write.table(filter(entero, group == "Control"), "plots/tables/control_enterodomination.tsv", sep = '\t', row.names = F, quote = F)
-length(unique(filter(entero, group == "Control")$patient_id))
-
-plyr::count(entero, "patient_id")
-
-######################################################################
-### 9. NMDS ordination ###############################################
+### NMDS ordination ##################################################
 ######################################################################
 
 ### ordinate species-level classifications
@@ -510,7 +489,7 @@ permutest(dispersion)
 adonis(vare_dis ~ group, data = filter(prebio_meta, sequenced_status == T))
 
 ######################################################################
-### 10. Boxplots of specific features #################################
+### Boxplots of specific features ####################################
 ######################################################################
 
 plot_data <- brack_g_perc
@@ -541,7 +520,7 @@ g <- ggplot(data_filt, aes(x=taxon, y=rel_abundance)) +
 # ggsave("plots/lefse_g_boxplot.png", g, device = "png", height = 10, width = 10)
 
 ######################################################################
-### 11. Input tables for lefse #######################################
+### Input tables for lefse ###########################################
 ######################################################################
 
 # function to keep features that are at least x relative abundance in at least n% samples
@@ -603,7 +582,7 @@ subset_lefse(brack_sp_perc, 14, 0.1, 2/29, "03_lefse/lefse_sp_relab0.1_prev2_day
 subset_lefse(brack_g_perc, 14, 0.1, 2/29, "03_lefse/lefse_g_relab0.1_prev2_day14.tsv")
 
 ######################################################################
-### 12. Process/plot lefse results ###################################
+### Process/plot lefse results #######################################
 ######################################################################
 
 ## plot lefse barplot results
