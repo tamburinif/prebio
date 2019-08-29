@@ -8,8 +8,11 @@
 
     `git clone https://github.com/tamburinif/prebio.git`
 
-2. Open the R script and run. You may have to install packages -- this can be done e.g.
+2. Run the code -- either open the R script in Rstudio and highlight/run code, or run on the command line:
 
+    `R prebio.R`
+
+    You may have to install some/all of the required packages on your system -- this can be done in Rstudio, e.g.
+    
     `install.packages("ggplot2")`
 
-3. Please don't push changes that break anything
