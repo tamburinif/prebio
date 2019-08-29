@@ -6,10 +6,10 @@
 
 1. Clone this repo
 
-  git clone
+    `git clone`
 
 2. Open the R script and run. You may have to install packages -- this can be done e.g.
 
-  install.packages("ggplot2")
+    `install.packages("ggplot2")`
 
 3. Please don't push changes that break anything
