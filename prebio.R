@@ -7,11 +7,13 @@ library(genefilter)
 library(RColorBrewer)
 library(plyr)
 library(dplyr)
+library(tibble)
 library(reshape2)
 library(scales)
 library(MASS)
 library(gtools)
 library(vegan)
+library(q2)
 library(ggpubr)
 library(cowplot)
 
@@ -41,7 +43,7 @@ prebio_meta_all <- read.table("metadata/prebio_meta.tsv", sep = '\t', header = T
 
 # set FOS/Control grouping
 prebio_meta_all$group <- ifelse(startsWith(as.character(prebio_meta_all$patient_id), '303'), "FOS", "Control")
-prebio_meta_all$group <- factor(prebio_meta_all$group, levels = c("FOS", "Control"))
+prebio_meta_all$group <- factor(prebio_meta_all$group, levels = c("Control", "FOS"))
 
 # format columns as date
 prebio_meta_all$date <- as.Date(prebio_meta_all$date)
@@ -58,6 +60,11 @@ prebio_meta <- prebio_meta[mixedorder(unique(prebio_meta$sequencing_id)), ]
 ## bracken species read counts including unclassifed
 brack_sp_reads <- read.table("input_data/bracken_species_reads.txt", sep = '\t', header = T, quote = "")
 brack_g_reads <- read.table("input_data/bracken_genus_reads.txt", sep = '\t', header = T, quote = "")
+
+# add pseudocount
+brack_sp_pseudo <- brack_sp_reads
+brack_sp_pseudo[brack_sp_pseudo == 0] <- 1
+brack_sp_pseudo_rel <- sweep(brack_sp_pseudo[-which(rownames(brack_sp_pseudo) == "Unclassified"), ], 2, colSums(brack_sp_reads[-which(rownames(brack_sp_pseudo) == "Unclassified"), ]), FUN = "/")
 
 ## bracken species percentage -- classified only
 brack_sp_perc <- read.table("input_data/bracken_species_perc.txt", sep = '\t', header = T, quote = "")
@@ -350,6 +357,177 @@ permutest(dispersion)
 
 adonis(vare_dis ~ group, data = filter(prebio_meta, sequenced_status == T))
 
+######################################################################
+### Differential features with DESeq2 ################################
+######################################################################
+
+# FOS vs control at day 14
+count_data <- brack_sp_reads
+col_data <- prebio_meta %>% filter(sequencing_id %in% names(count_data) & day == 14) %>% column_to_rownames(var = "sequencing_id")
+
+count_data <- count_data[, rownames(col_data)]
+# col_data <- col_data[order(row.names(col_data)), ]
+
+count_data_filt <- count_data[genefilter(count_data, pOverA(p = 0.20, A = 1000)), ]
+
+dds <- DESeqDataSetFromMatrix(countData = count_data_filt,
+                              colData = col_data,
+                              design= ~ group)
+dds <- DESeq(dds)
+resultsNames(dds) # lists the coefficients
+res <- results(dds, name = "group_FOS_vs_Control", alpha = 0.05)
+resOrdered <- data.frame(res[order(res$pvalue),])
+
+res_filt <- resOrdered %>% rownames_to_column(var = "taxon") %>% filter(padj < 0.05) %>% arrange(log2FoldChange)
+res_filt$taxon <- factor(res_filt$taxon, levels = as.character(res_filt$taxon))
+res_filt$direction <- ifelse(res_filt$log2FoldChange < 0, "Control", "FOS")
+
+res_filt$rel_abundance <- reshape2::melt(as.matrix(brack_sp_perc[, which(names(brack_sp_perc) %in% rownames(col_data))])) %>%
+  filter(Var1 %in% res_filt$taxon) %>% group_by(Var1) %>% summarise(rel_abundance = mean(value)) %>% arrange(factor(Var1, levels = res_filt$taxon)) %>% pull(rel_abundance)
+
+res_filt$prevalence <- reshape2::melt(as.matrix(count_data)) %>% filter(Var1 %in% res_filt$taxon) %>%
+  group_by(Var1) %>% summarise(prevalence = (sum(value > 0)/length(value))*100) %>% arrange(factor(Var1, levels = res_filt$taxon)) %>% pull(prevalence)
+
+ggplot(res_filt, aes(log2FoldChange, taxon, color = direction, size = rel_abundance * 100, alpha = prevalence)) +
+  geom_point() +
+  theme_cowplot(12) +
+  scale_color_manual(values = rev(my_pal)) +
+  labs(
+    x = "Log2 Fold Change",
+    y = "Taxon",
+    color = "Remission",
+    size = "Mean relative abundance (%)",
+    alpha = "Prevalence (%)"
+  )
+ggsave("/Users/tamburif/Desktop/prebio_deseq2.png", width = 10, height = 6)
+
+sp_long <- reshape2::melt(as.matrix(brack_sp_pseudo_rel[, which(names(brack_sp_pseudo_rel) %in% rownames(col_data))]))
+sp_long <- merge(sp_long, prebio_meta, by.x = "Var2", by.y = "sequencing_id")
+sp_long <- filter(sp_long, sp_long$Var1 %in% res_filt$taxon)
+# sp_long$value_pseudocount <- sp_long$value
+# sp_long$value_pseudocount[sp_long$value_pseudocount == 0] <- 1e-6
+
+sp_long$Var1 = factor(sp_long$Var1, levels = sort(unique(as.character(sp_long$Var1))))
+
+ggplot(sp_long, aes(group, value * 100, fill = group)) +
+  geom_boxplot(color = "black", outlier.shape = NA) +
+  geom_jitter(width = 0.3, color = "black", shape = 21) +
+  scale_fill_manual(values = rev(my_pal)) +
+  theme_cowplot(12) +
+  facet_wrap(~ Var1, scales = "free", ncol = 4) +
+  # scale_y_log10(label = comma) +
+  labs(
+    x = "",
+    y = "Relative abundance (%)",
+    fill = ""
+  )
+ggsave("/Users/tamburif/Desktop/prebio_deseq2_boxplot.png", width = 12, height = 14)
+
+ggplot(sp_long, aes(group, value * 100, fill = group)) +
+  geom_boxplot(color = "black", outlier.shape = NA) +
+  geom_jitter(width = 0.3, color = "black", shape = 21) +
+  scale_fill_manual(values = rev(my_pal)) +
+  theme_cowplot(12) +
+  facet_wrap(~ Var1, scales = "free", ncol = 4) +
+  scale_y_log10(label = comma) +
+  labs(
+    x = "",
+    y = "Relative abundance at day 14 (%)",
+    fill = ""
+  )
+ggsave("/Users/tamburif/Desktop/prebio_deseq2_boxplot_log10.png", width = 12, height = 14)
+
+## log2fc of these over time relative to baseline
+counts_long <- melt(brack_sp_pseudo_rel %>% rownames_to_column(var = "species"), id.vars = "species", variable.name = "sequencing_id", value.name = "rel_abundance")
+counts_meta <- merge(counts_long, prebio_meta, by = "sequencing_id")
+
+species_list <- c("Bacteroides cellulosilyticus", "Sellimonas intestinalis", "Faecalibacterium prausnitzii", "Akkermansia muciniphila")
+
+counts_meta <- counts_meta %>% filter(species %in% species_list & day <= 28)
+
+# only consider patients with sample at day 0
+patients_at_screening <- counts_meta %>% filter(day == -5) %>% pull(patient_code) %>% unique()
+counts_fc <- counts_meta %>% filter(patient_code %in% patients_at_screening) %>% group_by(patient_code, species) %>% mutate(log2fc = log2(rel_abundance/rel_abundance[day == -5]))
+
+# line plot
+line <- ggplot(counts_fc, aes(x = day, y = log2fc, group = patient_id, color = group)) +
+  geom_line() +
+  geom_point() +
+  scale_color_manual(values = rev(my_pal)) +
+  facet_wrap(~ species, scales = "free") +
+  scale_x_continuous(breaks = c(-5, 0, 7, 14, 28)) +
+  labs(
+    x = "Day",
+    y = "Log2FC",
+    color = ""
+  ) +
+  theme_cowplot()
+
+# geom smooth
+smooth <- ggplot(counts_fc, aes(x = day, y = log2fc, group = group, color = group)) +
+  geom_point() +
+  geom_smooth() +
+  scale_color_manual(values = rev(my_pal)) +
+  facet_wrap(~ species, scales = "free") +
+  scale_x_continuous(breaks = c(-5, 0, 7, 14, 28)) +
+  labs(
+    x = "Day",
+    y = "Log2FC",
+    color = ""
+  ) +
+  theme_cowplot()
+
+plot_grid(line, smooth, labels = c("A", "B"), ncol = 1)
+ggsave("/Users/tamburif/Desktop/prebio_log2fc.png", width = 8.5, height = 11)
+
+### DESeq2 time * group
+days <- c(-5, 14)
+count_data <- brack_sp_reads
+col_data <- prebio_meta %>% filter(sequencing_id %in% names(count_data) & day %in% days) %>%
+  column_to_rownames(var = "sequencing_id")
+
+col_data$day <- factor(col_data$day, levels = days)
+
+count_data <- count_data[, rownames(col_data)]
+
+count_data_filt <- count_data[genefilter(count_data, pOverA(p = 0.20, A = 1000)), ]
+
+dds <- DESeqDataSetFromMatrix(countData = count_data_filt,
+                              colData = col_data,
+                              design = ~ group + day + group:day)
+
+dds <- DESeq(dds, test="LRT", reduced = ~ group + day, parallel = T)
+res <- results(dds, alpha = 0.05)
+# res$symbol <- mcols(dds)$symbol
+# head(res[order(res$padj),], 4)
+# resultsNames(dds) # lists the coefficients
+resOrdered <- data.frame(res[order(res$pvalue),])
+res_filt <- resOrdered[which(resOrdered$padj < 0.05), ]
+write.table(res_filt, "/Users/tamburif/Desktop/deseq2_res_day14.txt", sep = "\t", quote = F)
+
+### DESeq2 time * group
+count_data <- brack_sp_reads
+col_data <- prebio_meta %>% filter(sequencing_id %in% names(count_data) & day %in% c(-5, 7)) %>%
+  column_to_rownames(var = "sequencing_id")
+
+col_data$day <- factor(col_data$day, levels = c(-5, 7))
+
+count_data <- count_data[, rownames(col_data)]
+
+count_data_filt <- count_data[genefilter(count_data, pOverA(p = 0.20, A = 1000)), ]
+
+dds <- DESeqDataSetFromMatrix(countData = count_data_filt,
+                              colData = col_data,
+                              design = ~ group + day + group:day)
+
+dds <- DESeq(dds, test="LRT", reduced = ~ group + day, parallel = T)
+res <- results(dds, alpha = 0.05)
+# res$symbol <- mcols(dds)$symbol
+# head(res[order(res$padj),], 4)
+# resultsNames(dds) # lists the coefficients
+resOrdered <- data.frame(res[order(res$pvalue),])
+res_filt_day7 <- resOrdered[which(resOrdered$padj < 0.05), ]
+write.table(res_filt_day7, "/Users/tamburif/Desktop/deseq2_res_day7.txt", sep = "\t", quote = F)
 
 ######################################################################
 ### Input tables for lefse ###########################################
